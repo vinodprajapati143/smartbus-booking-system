@@ -15,6 +15,7 @@ export class BookingListComponent {
   private bookingService = inject(BookingService);
 
   filterDate = signal<string>(new Date().toISOString().split('T')[0]);
+  callingMobile = signal<string | null>(null);
   
   // Sorted list using the Optimal Boarding Algorithm
   optimalBookings = computed(() => {
@@ -26,8 +27,15 @@ export class BookingListComponent {
   }
 
   initiateCall(mobile: string) {
-    // In a real app, this would use window.location.href = 'tel:' + mobile;
-    console.log('Calling...', mobile);
-    alert('Initiating call to ' + mobile);
+    this.callingMobile.set(mobile);
+  }
+
+  closeCallPopup() {
+    this.callingMobile.set(null);
+  }
+
+  confirmCall(mobile: string) {
+    window.location.href = `tel:${mobile}`;
+    this.closeCallPopup();
   }
 }
