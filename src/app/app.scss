@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media (max-width:600px) {
+    .btn-mobile {
+        padding: 8px;
+        font-size: 12px;
+    }
+}
