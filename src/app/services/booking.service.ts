@@ -1,49 +1,51 @@
 import { Injectable, signal, effect, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Booking, Seat } from '../models/models';
+import { BUS_CONFIG } from '../core/constants';
 
 @Injectable({
   providedIn: 'root'
 })
 export class BookingService {
-  private readonly STORAGE_KEY = 'smartbus_bookings';
   private platformId = inject(PLATFORM_ID);
   
-  // State using Signals
+  // Reactive state management using Signals
   bookings = signal<Booking[]>([]);
   
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
-      // Load initial data only in browser
-      this.bookings.set(this.loadBookings());
+      this.bookings.set(this.getStoredBookings());
 
-      // Sync state to localStorage whenever it changes
+      // Persist state to local storage on change
       effect(() => {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.bookings()));
+        localStorage.setItem(BUS_CONFIG.STORAGE_KEY, JSON.stringify(this.bookings()));
       });
     }
   }
 
-  private loadBookings(): Booking[] {
+  private getStoredBookings(): Booking[] {
     if (!isPlatformBrowser(this.platformId)) return [];
-    const saved = localStorage.getItem(this.STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem(BUS_CONFIG.STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Failed to parse storage data:', e);
+      return [];
+    }
   }
 
   /**
-   * Generates a 15-row, 2x2 layout
+   * Generates the initial seating grid based on configuration
    */
   getInitialSeatingLayout(date: string): Seat[] {
     const layout: Seat[] = [];
-    const columns = ['A', 'B', 'C', 'D'];
     
-    // Get already booked seats for this date
     const bookedSeats = this.bookings()
       .filter(b => b.travelDate === date)
       .flatMap(b => b.seats);
 
-    for (let row = 1; row <= 15; row++) {
-      for (const col of columns) {
+    for (let row = 1; row <= BUS_CONFIG.ROWS; row++) {
+      for (const col of BUS_CONFIG.COLUMNS) {
         const id = `${col}${row}`;
         layout.push({
           id,
@@ -57,26 +59,26 @@ export class BookingService {
   }
 
   /**
-   * Constraint: Max 6 seats per mobile per day
+   * Validates if a user can book more seats based on daily limits
    */
   canBook(mobile: string, date: string, seatCount: number): boolean {
     const existingCount = this.bookings()
       .filter(b => b.mobileNumber === mobile && b.travelDate === date)
       .reduce((sum, b) => sum + b.seats.length, 0);
     
-    return (existingCount + seatCount) <= 6;
+    return (existingCount + seatCount) <= BUS_CONFIG.MAX_SEATS_PER_USER;
   }
 
   createBooking(mobile: string, date: string, selectedSeats: string[]): Booking {
     if (!this.canBook(mobile, date, selectedSeats.length)) {
-      throw new Error('Maximum 6 seats per mobile number per day exceeded.');
+      throw new Error(`Maximum of ${BUS_CONFIG.MAX_SEATS_PER_USER} seats per mobile number exceeded for this date.`);
     }
 
     const newBooking: Booking = {
-      id: 'SB-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+      id: `SB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       travelDate: date,
       mobileNumber: mobile,
-      seats: selectedSeats,
+      seats: [ ...selectedSeats ],
       isBoarded: false
     };
 
@@ -85,33 +87,31 @@ export class BookingService {
   }
 
   /**
-   * Optimal Boarding Algorithm
-   * Minimizes blocking by ordering farthest seats first.
-   * If a booking has multiple seats, we consider the maximum row (farthest) 
-   * to determine its sequence.
+   * Sorts bookings by seat position for efficient passenger boarding
+   * Returns a list with assigned sequence numbers (back-to-front)
    */
-  getOptimalBoardingList(date: string): Booking[] {
+  getBoardingSequence(date: string): Booking[] {
     const dailyBookings = this.bookings().filter(b => b.travelDate === date);
     
-    return dailyBookings.sort((a, b) => {
-      const maxRowA = this.getMaxRowForBooking(a);
-      const maxRowB = this.getMaxRowForBooking(b);
-      
-      // Descending order of rows (Row 15 first, Row 1 last)
-      return maxRowB - maxRowA;
-    }).map((booking, index) => ({
-      ...booking,
-      sequenceNumber: index + 1
-    }));
+    return dailyBookings
+      .slice()
+      .sort((a, b) => {
+        const rowA = this.getFarthestRow(a);
+        const rowB = this.getFarthestRow(b);
+        return rowB - rowA; // Descending row order
+      })
+      .map((booking, index) => ({
+        ...booking,
+        sequenceNumber: index + 1
+      }));
   }
 
-  private getMaxRowForBooking(booking: Booking): number {
-    // Seat ID is like "A15", extract numbers
-    const rows = booking.seats.map(id => parseInt(id.substring(1), 10));
+  private getFarthestRow(booking: Booking): number {
+    const rows = booking.seats.map(id => parseInt(id.replace(/^\D+/g, ''), 10));
     return Math.max(...rows);
   }
 
-  toggleBoarded(bookingId: string) {
+  toggleBoardingStatus(bookingId: string) {
     this.bookings.update(all => 
       all.map(b => b.id === bookingId ? { ...b, isBoarded: !b.isBoarded } : b)
     );

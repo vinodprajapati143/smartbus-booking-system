@@ -2,7 +2,6 @@ import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BookingService } from '../../services/booking.service';
-import { Booking } from '../../models/models';
 
 @Component({
   selector: 'app-booking-list',
@@ -15,27 +14,26 @@ export class BookingListComponent {
   private bookingService = inject(BookingService);
 
   filterDate = signal<string>(new Date().toISOString().split('T')[0]);
-  callingMobile = signal<string | null>(null);
+  activeCallMobile = signal<string | null>(null);
   
-  // Sorted list using the Optimal Boarding Algorithm
-  optimalBookings = computed(() => {
-    return this.bookingService.getOptimalBoardingList(this.filterDate());
+  boardingSequence = computed(() => {
+    return this.bookingService.getBoardingSequence(this.filterDate());
   });
 
-  onToggleBoarded(bookingId: string) {
-    this.bookingService.toggleBoarded(bookingId);
+  onToggleBoardingStatus(bookingId: string) {
+    this.bookingService.toggleBoardingStatus(bookingId);
   }
 
   initiateCall(mobile: string) {
-    this.callingMobile.set(mobile);
+    this.activeCallMobile.set(mobile);
   }
 
-  closeCallPopup() {
-    this.callingMobile.set(null);
+  cancelCall() {
+    this.activeCallMobile.set(null);
   }
 
-  confirmCall(mobile: string) {
+  confirmAndCall(mobile: string) {
     window.location.href = `tel:${mobile}`;
-    this.closeCallPopup();
+    this.cancelCall();
   }
 }

@@ -1,7 +1,7 @@
 export interface Seat {
-  id: string; // e.g., "A1", "B15"
-  row: number; // 1 to 15
-  col: string; // A, B, C, D
+  id: string;
+  row: number;
+  col: string;
   isBooked: boolean;
   isTempSelected?: boolean;
 }
@@ -10,7 +10,7 @@ export interface Booking {
   id: string;
   travelDate: string;
   mobileNumber: string;
-  seats: string[]; // List of seat IDs
+  seats: string[];
   isBoarded: boolean;
   sequenceNumber?: number;
 }

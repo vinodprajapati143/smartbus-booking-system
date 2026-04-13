@@ -1,8 +1,9 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BookingService } from '../../services/booking.service';
 import { Seat, Booking } from '../../models/models';
+import { BUS_CONFIG } from '../../core/constants';
 
 @Component({
   selector: 'app-booking',
@@ -22,39 +23,38 @@ export class BookingComponent {
 
   seatsInRows = signal<Seat[][]>([]);
   selectedSeats = signal<string[]>([]);
-  confirmationBooking = signal<Booking | null>(null);
+  activeBooking = signal<Booking | null>(null);
   errorMessage = signal<string | null>(null);
 
   constructor() {
-    // Fill initial grid when date changes
     this.bookingForm.get('travelDate')?.valueChanges.subscribe(date => {
       if (date) {
-        this.loadLayout(date);
+        this.initializeLayout(date);
         this.selectedSeats.set([]);
       }
     });
   }
 
-  loadLayout(date: string) {
+  initializeLayout(date: string) {
     const flatSeats = this.bookingService.getInitialSeatingLayout(date);
-    // Group into rows of 4
     const rows: Seat[][] = [];
-    for (let i = 0; i < 15; i++) {
-      rows.push(flatSeats.slice(i * 4, i * 4 + 4));
+    const seatsPerRow = BUS_CONFIG.COLUMNS.length;
+
+    for (let i = 0; i < BUS_CONFIG.ROWS; i++) {
+      rows.push(flatSeats.slice(i * seatsPerRow, i * seatsPerRow + seatsPerRow));
     }
     this.seatsInRows.set(rows);
   }
 
-  toggleSeat(seat: Seat) {
+  toggleSeatSelection(seat: Seat) {
     if (seat.isBooked) return;
 
     this.selectedSeats.update(selected => {
       if (selected.includes(seat.id)) {
         return selected.filter(s => s !== seat.id);
       } else {
-        if (selected.length >= 6) {
-          this.errorMessage.set('You can select a maximum of 6 seats.');
-          setTimeout(() => this.errorMessage.set(null), 3000);
+        if (selected.length >= BUS_CONFIG.MAX_SEATS_PER_USER) {
+          this.setTemporaryError(`Maximum of ${BUS_CONFIG.MAX_SEATS_PER_USER} seats can be selected per booking.`);
           return selected;
         }
         return [...selected, seat.id];
@@ -62,7 +62,7 @@ export class BookingComponent {
     });
   }
 
-  onBook() {
+  onConfirmBooking() {
     if (this.bookingForm.invalid) {
       this.bookingForm.markAllAsTouched();
       return;
@@ -72,7 +72,7 @@ export class BookingComponent {
     const selected = this.selectedSeats();
 
     if (selected.length === 0) {
-      this.errorMessage.set('Please select at least one seat.');
+      this.setTemporaryError('Please select at least one seat to proceed.');
       return;
     }
 
@@ -82,16 +82,21 @@ export class BookingComponent {
         travelDate!,
         selected
       );
-      this.confirmationBooking.set(booking);
+      this.activeBooking.set(booking);
       this.selectedSeats.set([]);
-      this.loadLayout(travelDate!);
+      this.initializeLayout(travelDate!);
     } catch (e: any) {
       this.errorMessage.set(e.message);
     }
   }
 
-  closePopup() {
-    this.confirmationBooking.set(null);
+  private setTemporaryError(message: string) {
+    this.errorMessage.set(message);
+    setTimeout(() => this.errorMessage.set(null), 3000);
+  }
+
+  resetWorkflow() {
+    this.activeBooking.set(null);
     this.bookingForm.reset();
   }
 }
